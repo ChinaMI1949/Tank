@@ -1,0 +1,1274 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>双人对战坦克 · DJH 浩源</title>
+    
+    <!-- 音频资源 -->
+    <audio id="bgMusic" loop>
+        <source src="https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3" type="audio/mpeg">
+    </audio>
+    <audio id="shootSound">
+        <source src="https://www.soundjay.com/misc/sounds/gun-shot-01.mp3" type="audio/mpeg">
+    </audio>
+    <audio id="hitSound">
+        <source src="https://www.soundjay.com/misc/sounds/impact-metal-01.mp3" type="audio/mpeg">
+    </audio>
+    <audio id="explodeSound">
+        <source src="https://www.soundjay.com/misc/sounds/explosion-01.mp3" type="audio/mpeg">
+    </audio>
+    
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            min-height: 100vh;
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            padding: 10px;
+            background: #1a2a32;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        /* ===== 整体缩放容器：67% ===== */
+        .game-wrapper {
+            background: #2d3f4b;
+            padding: 20px 24px 24px;
+            border-radius: 32px;
+            max-width: 610px;
+            width: 100%;
+            margin: 0 auto;
+            box-shadow: 0 20px 35px rgba(0,0,0,0.7);
+            position: relative;
+            background-image: 
+                radial-gradient(circle at 20% 30%, rgba(245, 215, 66, 0.03) 0%, transparent 50%),
+                radial-gradient(circle at 80% 70%, rgba(245, 215, 66, 0.04) 0%, transparent 60%),
+                linear-gradient(145deg, #2d3f4b 0%, #24353f 100%);
+            overflow: visible;
+            transform: scale(0.67);
+            transform-origin: top center;
+            /* 为了让缩放后居中，利用 margin 自动调整 */
+            margin: 0 auto;
+        }
+        /* 为了抵消缩放带来的尺寸变化，内部所有尺寸保持原样，外层缩放即可 */
+        /* ===== 外部标识 "DJH" 黄色 嵌入背景 ===== */
+        .brand-djh {
+            position: absolute;
+            top: -8px;
+            left: 50%;
+            transform: translateX(-50%) rotate(-2deg);
+            font-size: 4.2rem;
+            font-weight: 900;
+            font-family: 'Arial Black', 'Segoe UI', sans-serif;
+            color: rgba(245, 215, 66, 0.20);
+            text-shadow: 
+                0 0 50px rgba(245, 215, 66, 0.08),
+                0 4px 20px rgba(0,0,0,0.15);
+            letter-spacing: 18px;
+            pointer-events: none;
+            z-index: 1;
+            line-height: 1;
+            white-space: nowrap;
+            background: transparent;
+            backdrop-filter: none;
+            border: none;
+            box-shadow: none;
+            padding: 0 20px;
+            mix-blend-mode: overlay;
+            opacity: 0.8;
+            user-select: none;
+            width: auto;
+        }
+        /* 网格纹理增强嵌入感 */
+        .game-wrapper::before {
+            content: "";
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 0;
+            background-image: 
+                linear-gradient(rgba(255,255,255,0.01) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255,255,255,0.01) 1px, transparent 1px);
+            background-size: 30px 30px;
+            border-radius: 48px;
+            opacity: 0.3;
+        }
+        /* 内容层级高于水印 */
+        .game-title, .canvas-container, .players-panel, .info-panel {
+            position: relative;
+            z-index: 2;
+        }
+        .game-title {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+            padding: 0 6px;
+            flex-wrap: wrap;
+            gap: 6px;
+            color: #d4e9f5;
+            margin-top: 28px;
+        }
+        .game-title h1 {
+            font-size: 1.3rem;
+            font-weight: 900;
+            color: #f5d742;
+            margin: 0;
+            text-shadow: 0 0 20px rgba(245,215,66,0.3);
+        }
+        .game-title .seven-win {
+            font-size: 1.0rem;
+            font-weight: 900;
+            color: #ff6b4a;
+            background: rgba(255,107,74,0.2);
+            padding: 1px 12px;
+            border-radius: 30px;
+            border: 2px solid #ff6b4a;
+        }
+        .game-title .round-info {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 0.95rem;
+            font-weight: 700;
+        }
+        .game-title .round-info .round-num {
+            font-size: 1.6rem;
+            color: #f5d742;
+            background: #1f2e38;
+            padding: 0 12px;
+            border-radius: 10px;
+            min-width: 38px;
+            text-align: center;
+        }
+        .game-title .round-info .bullet-remain {
+            font-size: 1.6rem;
+            color: #ff8844;
+            background: #1f2e38;
+            padding: 0 12px;
+            border-radius: 10px;
+            min-width: 38px;
+            text-align: center;
+        }
+        .canvas-container {
+            background: #1f2e38;
+            border-radius: 20px;
+            padding: 6px;
+            box-shadow: inset 0 6px 12px rgba(0,0,0,0.6);
+            position: relative;
+            overflow: hidden;
+            z-index: 2;
+        }
+        /* ===== 地图内 "浩源" 水印 ===== */
+        .canvas-container::after {
+            content: "浩源";
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%) rotate(-6deg) scale(1.0);
+            font-size: 5.5rem;
+            font-weight: 900;
+            font-family: 'SimHei', 'Arial Black', 'Segoe UI', sans-serif;
+            color: rgba(46, 125, 50, 0.18);
+            text-shadow: 
+                0 0 30px rgba(76, 175, 80, 0.15),
+                0 0 80px rgba(46, 125, 50, 0.08),
+                0 4px 20px rgba(0,0,0,0.2);
+            pointer-events: none;
+            z-index: 5;
+            letter-spacing: 12px;
+            white-space: nowrap;
+            border: none;
+            background: transparent;
+            backdrop-filter: none;
+            box-shadow: none;
+            border-radius: 0;
+            padding: 0;
+            mix-blend-mode: overlay;
+            opacity: 0.7;
+        }
+        canvas {
+            display: block;
+            width: 100%;
+            max-width: 600px;
+            height: auto;
+            aspect-ratio: 1/1;
+            margin: 0 auto;
+            border-radius: 14px;
+            background: #2a3d48;
+            box-shadow: 0 0 0 1px #4f6a7a;
+            image-rendering: crisp-edges;
+            position: relative;
+            z-index: 2;
+        }
+        .players-panel {
+            display: flex;
+            gap: 10px;
+            margin-top: 12px;
+            color: #d4e9f5;
+            position: relative;
+            z-index: 2;
+        }
+        .player-card {
+            flex: 1;
+            border-radius: 16px;
+            padding: 8px 12px;
+            background: #1a2c36;
+            border-bottom: 3px solid #4f6a7a;
+        }
+        .player-card.p1 { border-bottom-color: #4f9f6b; }
+        .player-card.p2 { border-bottom-color: #3f7b9e; }
+        .player-card .p-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .player-card .p-name { font-size: 1.0rem; font-weight: 800; }
+        .player-card .p-name.p1 { color: #4f9f6b; }
+        .player-card .p-name.p2 { color: #3f7b9e; }
+        .player-card .p-score {
+            font-size: 1.8rem;
+            font-weight: 900;
+            color: #f5d742;
+            text-shadow: 0 0 20px rgba(245,215,66,0.3);
+        }
+        .player-card .p-hp-row {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            margin: 2px 0;
+        }
+        .player-card .p-hp-row .hp-bar-big {
+            flex: 1;
+            height: 10px;
+            background: #2a1a1a;
+            border-radius: 6px;
+            overflow: hidden;
+            border: 1px solid #4a5a6a;
+        }
+        .player-card .p-hp-row .hp-bar-big .hp-fill-big {
+            height: 100%;
+            border-radius: 6px;
+            transition: width 0.2s;
+        }
+        .hp-fill-big.p1 { background: #4f9f6b; }
+        .hp-fill-big.p2 { background: #3f7b9e; }
+        .player-card .p-hp-row .hp-num {
+            font-weight: 700;
+            font-size: 0.75rem;
+            min-width: 34px;
+            text-align: right;
+        }
+        .player-card .p-stats {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 2px 6px;
+            margin-top: 4px;
+            font-size: 0.65rem;
+            color: #b4d0dd;
+        }
+        .player-card .p-stats .stat-item {
+            display: flex;
+            justify-content: space-between;
+            background: #1f2e38;
+            padding: 1px 6px;
+            border-radius: 10px;
+        }
+        .player-card .p-stats .stat-item .stat-val { font-weight: 700; color: #d4e9f5; }
+        .player-card .p-stats .stat-item .stat-val.p1c { color: #4f9f6b; }
+        .player-card .p-stats .stat-item .stat-val.p2c { color: #3f7b9e; }
+        .info-panel {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 8px;
+            color: #d4e9f5;
+            flex-wrap: wrap;
+            gap: 6px;
+            position: relative;
+            z-index: 2;
+        }
+        .controls { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+        .btn {
+            background: #3f5c6b;
+            border: none;
+            border-radius: 40px;
+            color: #f0faff;
+            font-weight: bold;
+            font-size: 0.7rem;
+            padding: 4px 12px;
+            cursor: pointer;
+            box-shadow: 0 4px 0 #1e2f3a;
+            transition: all 0.07s ease;
+            border-bottom: 2px solid #678b9e;
+        }
+        .btn:active { transform: translateY(3px); box-shadow: 0 1px 0 #1e2f3a; }
+        .btn.reset { background: #b35f4a; border-bottom-color: #d98f7a; }
+        .btn.rules { background: #4a6a7a; border-bottom-color: #6a8a9a; }
+        .volume-btn {
+            background: #4a6a7a;
+            border: none;
+            border-radius: 40px;
+            color: #f0faff;
+            font-weight: bold;
+            font-size: 0.7rem;
+            padding: 4px 10px;
+            cursor: pointer;
+            box-shadow: 0 4px 0 #2a3a4a;
+            transition: all 0.07s ease;
+            border-bottom: 2px solid #6a8a9a;
+        }
+        .volume-btn:active { transform: translateY(3px); box-shadow: 0 1px 0 #2a3a4a; }
+        .volume-btn.muted { opacity: 0.5; }
+        .hint {
+            background: #1f2e38;
+            padding: 2px 10px;
+            border-radius: 40px;
+            font-size: 0.6rem;
+            color: #b4d0dd;
+            border-left: 3px solid #f5d742;
+            white-space: nowrap;
+        }
+
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.75);
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            backdrop-filter: blur(4px);
+        }
+        .modal-overlay.active { display: flex; }
+        .modal-box {
+            background: #1f2e38;
+            border-radius: 32px;
+            padding: 24px 28px;
+            max-width: 520px;
+            width: 90%;
+            max-height: 85vh;
+            overflow-y: auto;
+            border: 2px solid #4f6a7a;
+            box-shadow: 0 30px 50px rgba(0,0,0,0.8);
+        }
+        .modal-box h2 {
+            color: #f5d742;
+            font-size: 1.2rem;
+            margin: 0 0 12px 0;
+            text-align: center;
+            border-bottom: 2px solid #3a5a6a;
+            padding-bottom: 10px;
+        }
+        .modal-box .rule-text {
+            color: #d4e9f5;
+            font-size: 0.85rem;
+            line-height: 1.8;
+            white-space: pre-wrap;
+            font-weight: 400;
+        }
+        .modal-box .rule-text .highlight { color: #f5d742; font-weight: 600; }
+        .modal-box .rule-text .p1c { color: #4f9f6b; font-weight: 600; }
+        .modal-box .rule-text .p2c { color: #3f7b9e; font-weight: 600; }
+        .modal-box .rule-text .priority { color: #ff6b4a; font-weight: 700; }
+        .modal-close-btn {
+            display: block;
+            margin: 16px auto 0;
+            background: #b35f4a;
+            border: none;
+            border-radius: 60px;
+            color: #f0faff;
+            font-weight: bold;
+            font-size: 0.9rem;
+            padding: 8px 32px;
+            cursor: pointer;
+            box-shadow: 0 5px 0 #6a3a2a;
+            transition: all 0.07s ease;
+            border-bottom: 2px solid #d98f7a;
+        }
+        .modal-close-btn:active { transform: translateY(4px); box-shadow: 0 1px 0 #6a3a2a; }
+
+        /* 针对小屏手机额外优化 */
+        @media (max-width: 480px) {
+            .game-wrapper { transform: scale(0.58); transform-origin: top center; padding: 12px 14px 14px; }
+            .brand-djh { font-size: 2.8rem; letter-spacing: 12px; }
+            .game-title { margin-top: 20px; }
+            .game-title h1 { font-size: 1.0rem; }
+            .game-title .seven-win { font-size: 0.75rem; padding: 1px 8px; }
+            .game-title .round-info .round-num { font-size: 1.2rem; min-width: 28px; padding: 0 8px; }
+            .game-title .round-info .bullet-remain { font-size: 1.2rem; min-width: 28px; padding: 0 8px; }
+            .canvas-container::after { font-size: 4rem; letter-spacing: 8px; }
+            .player-card .p-name { font-size: 0.8rem; }
+            .player-card .p-score { font-size: 1.4rem; }
+            .hint { font-size: 0.5rem; padding: 1px 6px; }
+            .btn, .volume-btn { font-size: 0.6rem; padding: 3px 8px; }
+            .modal-box { padding: 16px; }
+            .modal-box .rule-text { font-size: 0.75rem; }
+        }
+        @media (max-width: 380px) {
+            .game-wrapper { transform: scale(0.50); transform-origin: top center; }
+        }
+    </style>
+</head>
+<body>
+<div class="game-wrapper">
+    <!-- DJH 水印 黄色 嵌入背景 -->
+    <div class="brand-djh">DJH</div>
+
+    <div class="game-title">
+        <div style="display:flex;align-items:center;gap:10px;">
+            <h1>⚔️ 坦克对战</h1>
+            <span class="seven-win">🏆 七局四胜制</span>
+        </div>
+        <div class="round-info">
+            <span>回合 <span class="round-num" id="roundText">1</span></span>
+            <span>💥 <span class="bullet-remain" id="bulletText">20</span></span>
+        </div>
+    </div>
+    <div class="canvas-container">
+        <canvas id="gameCanvas" width="600" height="600"></canvas>
+    </div>
+    <div class="players-panel">
+        <div class="player-card p1">
+            <div class="p-header">
+                <span class="p-name p1">★ P1</span>
+                <span class="p-score" id="p1MatchScore">0</span>
+            </div>
+            <div class="p-hp-row">
+                <span style="font-size:0.65rem;color:#b4d0dd;">HP</span>
+                <div class="hp-bar-big"><div class="hp-fill-big p1" id="p1HpBar" style="width:100%"></div></div>
+                <span class="hp-num" id="p1HpText">2000</span>
+            </div>
+            <div class="p-stats">
+                <div class="stat-item">移动 <span class="stat-val p1c" id="p1MoveCount">0</span></div>
+                <div class="stat-item">击中率 <span class="stat-val p1c" id="p1HitRate">0%</span></div>
+                <div class="stat-item">伤害 <span class="stat-val p1c" id="p1DamageText">0</span></div>
+                <div class="stat-item" style="grid-column:1/-1;">回合积分 <span class="stat-val" style="color:#f5d742;" id="p1RoundScoreText">0.00</span></div>
+            </div>
+        </div>
+        <div class="player-card p2">
+            <div class="p-header">
+                <span class="p-name p2">✦ P2</span>
+                <span class="p-score" id="p2MatchScore">0</span>
+            </div>
+            <div class="p-hp-row">
+                <span style="font-size:0.65rem;color:#b4d0dd;">HP</span>
+                <div class="hp-bar-big"><div class="hp-fill-big p2" id="p2HpBar" style="width:100%"></div></div>
+                <span class="hp-num" id="p2HpText">2000</span>
+            </div>
+            <div class="p-stats">
+                <div class="stat-item">移动 <span class="stat-val p2c" id="p2MoveCount">0</span></div>
+                <div class="stat-item">击中率 <span class="stat-val p2c" id="p2HitRate">0%</span></div>
+                <div class="stat-item">伤害 <span class="stat-val p2c" id="p2DamageText">0</span></div>
+                <div class="stat-item" style="grid-column:1/-1;">回合积分 <span class="stat-val" style="color:#f5d742;" id="p2RoundScoreText">0.00</span></div>
+            </div>
+        </div>
+    </div>
+    <div class="info-panel">
+        <span class="hint">P1: WASD + E开火 &nbsp;|&nbsp; P2: 方向键 + 0开火</span>
+        <div class="controls">
+            <button class="btn rules" id="rulesButton">📖 规则</button>
+            <button class="btn reset" id="resetButton">↺ 新游戏</button>
+            <button class="volume-btn" id="volumeBtn">🔊 音乐</button>
+        </div>
+    </div>
+</div>
+
+<div class="modal-overlay" id="rulesModal">
+    <div class="modal-box">
+        <h2>📖 游戏模式与规则</h2>
+        <div class="rule-text">
+游戏为<span class="highlight">回合制与歼灭模式并轨制</span>双人坦克对战。
+
+<span class="priority">⚠ 歼灭制优先级高于回合制</span>
+只要一方坦克被歼灭，比赛<span class="highlight">立即结束</span>，歼敌方获得最终胜利。
+
+<span class="highlight">▸ 回合制规则</span>
+• 每回合双方共同享有 <span class="highlight">20发炮弹</span>，20发炮弹清空即结束回合。
+• <span class="p1c">P1</span> 和 <span class="p2c">P2</span> 各自计算：<span class="highlight">击中率 = 击中数 ÷ 发射数</span>（对障碍物造成的伤害不记作击中）
+• <span class="highlight">七局四胜制</span>，每局积分多者得一分。
+• 每局积分 = <span class="highlight">击中率 + 对对方伤害 × 0.001</span>
+• 胜者 <span class="highlight">+150血量</span>，败者 <span class="highlight">-150血量</span>
+
+<span class="highlight">▸ 特殊判分规则</span>
+• 若一方20发炮弹全部射出而<span class="highlight">击中率为0</span>，则本回合判另一方得分。
+• 若20发炮弹全部射出，双方伤害均为0，则 <span class="highlight">射出炮弹数 + 移动数 × 0.5</span> 数值高者得一分；若相同则各得一分。
+• 若一方<span class="highlight">未射出一发炮弹</span>且不满足对方击中率为零的情况，对方得一分。
+
+<span class="highlight">▸ 歼灭制</span>
+• 把敌方坦克歼灭者获得 <span class="highlight">最终胜利</span>，比赛立即结束。
+        </div>
+        <button class="modal-close-btn" id="closeRulesBtn">我知道了</button>
+    </div>
+</div>
+
+<script>
+(function() {
+    // ===== 音效 =====
+    const bgMusic = document.getElementById('bgMusic');
+    const shootSound = document.getElementById('shootSound');
+    const hitSound = document.getElementById('hitSound');
+    const explodeSound = document.getElementById('explodeSound');
+    const volumeBtn = document.getElementById('volumeBtn');
+    let isMuted = false;
+
+    function playBackgroundMusic() {
+        bgMusic.volume = 0.3;
+        bgMusic.play().catch(() => {
+            document.addEventListener('click', function playOnClick() {
+                bgMusic.play();
+                document.removeEventListener('click', playOnClick);
+            }, { once: true });
+        });
+    }
+
+    volumeBtn.addEventListener('click', function() {
+        isMuted = !isMuted;
+        bgMusic.muted = isMuted;
+        shootSound.muted = isMuted;
+        hitSound.muted = isMuted;
+        explodeSound.muted = isMuted;
+        this.textContent = isMuted ? '🔇 静音' : '🔊 音乐';
+        this.classList.toggle('muted', isMuted);
+    });
+
+    function playShootSound() {
+        if (!isMuted) {
+            shootSound.currentTime = 0;
+            shootSound.volume = 0.4;
+            shootSound.play().catch(() => {});
+        }
+    }
+
+    function playHitSound() {
+        if (!isMuted) {
+            hitSound.currentTime = 0;
+            hitSound.volume = 0.5;
+            hitSound.play().catch(() => {});
+        }
+    }
+
+    function playExplodeSound() {
+        if (!isMuted) {
+            explodeSound.currentTime = 0;
+            explodeSound.volume = 0.6;
+            explodeSound.play().catch(() => {});
+        }
+    }
+
+    // ===== DOM =====
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const p1HpText = document.getElementById('p1HpText');
+    const p2HpText = document.getElementById('p2HpText');
+    const p1HpBar = document.getElementById('p1HpBar');
+    const p2HpBar = document.getElementById('p2HpBar');
+    const p1MatchScoreText = document.getElementById('p1MatchScore');
+    const p2MatchScoreText = document.getElementById('p2MatchScore');
+    const p1RoundScoreText = document.getElementById('p1RoundScoreText');
+    const p2RoundScoreText = document.getElementById('p2RoundScoreText');
+    const roundText = document.getElementById('roundText');
+    const bulletText = document.getElementById('bulletText');
+    const p1MoveCountText = document.getElementById('p1MoveCount');
+    const p2MoveCountText = document.getElementById('p2MoveCount');
+    const p1HitRateText = document.getElementById('p1HitRate');
+    const p2HitRateText = document.getElementById('p2HitRate');
+    const p1DamageText = document.getElementById('p1DamageText');
+    const p2DamageText = document.getElementById('p2DamageText');
+
+    // ===== 规则弹窗 =====
+    document.getElementById('rulesButton').addEventListener('click', function() {
+        document.getElementById('rulesModal').classList.add('active');
+    });
+    document.getElementById('closeRulesBtn').addEventListener('click', function() {
+        document.getElementById('rulesModal').classList.remove('active');
+    });
+    document.getElementById('rulesModal').addEventListener('click', function(e) {
+        if (e.target === this) this.classList.remove('active');
+    });
+
+    // ===== 常量 =====
+    const COLS = 13, ROWS = 13;
+    const TILE_SIZE = 600 / COLS;
+    const UP = 0, RIGHT = 1, DOWN = 2, LEFT = 3;
+    const MAX_HP = 2000, DAMAGE = 100, ROUND_BULLETS = 20;
+    const WIN_SCORE = 4;
+    const STEEL_RATIO = 0.20, BRICK_RATIO = 0.10, BRICK_MAX_HP = 300;
+    const SHOT_COOLDOWN = 22;
+    const HP_REWARD = 150, HP_PENALTY = 150;
+    const P1_COL = 1, P1_ROW = 12, P1_INIT_DIR = UP;
+    const P2_COL = 11, P2_ROW = 0, P2_INIT_DIR = DOWN;
+
+    // ===== 状态 =====
+    let map = [], brickHp = {};
+    let p1 = { 
+        col: P1_COL, row: P1_ROW, 
+        moveDir: P1_INIT_DIR,
+        aimDir: P1_INIT_DIR,
+        alive: true, hp: MAX_HP, moveLock: false, moves: 0 
+    };
+    let p2 = { 
+        col: P2_COL, row: P2_ROW, 
+        moveDir: P2_INIT_DIR,
+        aimDir: P2_INIT_DIR,
+        alive: true, hp: MAX_HP, moveLock: false, moves: 0 
+    };
+    let bullets = [];
+    let gameOver = false, matchOver = false, roundWinner = null;
+    let winReason = '';
+    let round = 1, bulletsFired = 0;
+    let p1Shots = 0, p1Hits = 0, p1Damage = 0;
+    let p2Shots = 0, p2Hits = 0, p2Damage = 0;
+    let p1MatchScore = 0, p2MatchScore = 0;
+    let p1RoundScore = 0, p2RoundScore = 0;
+    let isRoundActive = true, roundEnding = false;
+    let cooldown1 = 0, cooldown2 = 0;
+    
+    const keys = {
+        w: false, a: false, s: false, d: false,
+        e: false,
+        arrowup: false, arrowdown: false, arrowleft: false, arrowright: false,
+        digit0: false
+    };
+    const keyPressed = {
+        w: false, a: false, s: false, d: false,
+        arrowup: false, arrowdown: false, arrowleft: false, arrowright: false
+    };
+
+    // ===== 辅助 =====
+    function posToTile(px, py) { return { col: Math.floor(px / TILE_SIZE), row: Math.floor(py / TILE_SIZE) }; }
+    function canMoveTo(col, row, tank) {
+        if (col < 0 || col >= COLS || row < 0 || row >= ROWS) return false;
+        if (map[row][col] === 1 || map[row][col] === 2) return false;
+        const tanks = [p1, p2];
+        for (let t of tanks) { if (!t.alive || t === tank) continue; if (t.col === col && t.row === row) return false; }
+        return true;
+    }
+    function getBrickHp(row, col) { return brickHp[row + ',' + col] || 0; }
+    function setBrickHp(row, col, hp) {
+        const key = row + ',' + col;
+        if (hp <= 0) { delete brickHp[key]; map[row][col] = 0; }
+        else { brickHp[key] = hp; }
+    }
+
+    // ===== 地图连通性 =====
+    function isMapConnected(mapData) {
+        let startR = -1, startC = -1;
+        for (let r = 0; r < ROWS; r++) {
+            for (let c = 0; c < COLS; c++) {
+                if (mapData[r][c] === 0) { startR = r; startC = c; break; }
+            }
+            if (startR !== -1) break;
+        }
+        if (startR === -1) return false;
+        const visited = Array(ROWS).fill().map(() => Array(COLS).fill(false));
+        const queue = [[startR, startC]];
+        visited[startR][startC] = true;
+        const dirs = [[0,1],[0,-1],[1,0],[-1,0]];
+        while (queue.length > 0) {
+            const [r, c] = queue.shift();
+            for (let d of dirs) {
+                const nr = r + d[0], nc = c + d[1];
+                if (nr >= 0 && nr < ROWS && nc >= 0 && nc < COLS && !visited[nr][nc] && mapData[nr][nc] === 0) {
+                    visited[nr][nc] = true; queue.push([nr, nc]);
+                }
+            }
+        }
+        for (let r = 0; r < ROWS; r++) {
+            for (let c = 0; c < COLS; c++) {
+                if (mapData[r][c] === 0 && !visited[r][c]) return false;
+            }
+        }
+        return true;
+    }
+
+    // ===== 生成地图 =====
+    function generateMap() {
+        for (let attempt = 0; attempt < 500; attempt++) {
+            const m = Array(ROWS).fill().map(() => Array(COLS).fill(0));
+            const hp = {};
+            const reserved = new Set();
+            const p1Area = [[1,12],[1,11],[0,12],[2,12],[1,13]];
+            const p2Area = [[11,0],[11,1],[10,0],[12,0],[11,-1]];
+            for (let [r,c] of p1Area) { if (r>=0&&r<ROWS&&c>=0&&c<COLS) reserved.add(r+','+c); }
+            for (let [r,c] of p2Area) { if (r>=0&&r<ROWS&&c>=0&&c<COLS) reserved.add(r+','+c); }
+            for (let r = 5; r <= 7; r++) {
+                for (let c = 5; c <= 7; c++) reserved.add(r+','+c);
+            }
+            for (let c = 2; c < 11; c++) {
+                reserved.add(12+','+c);
+            }
+            let available = [];
+            for (let r = 0; r < ROWS; r++) {
+                for (let c = 0; c < COLS; c++) {
+                    if (!reserved.has(r+','+c)) available.push([r, c]);
+                }
+            }
+            for (let i = available.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [available[i], available[j]] = [available[j], available[i]];
+            }
+            const totalCells = COLS * ROWS;
+            const steelCount = Math.floor(totalCells * STEEL_RATIO);
+            const brickCount = Math.floor(totalCells * BRICK_RATIO);
+            let idx = 0;
+            for (let i = 0; i < steelCount && idx < available.length; i++) {
+                const [r, c] = available[idx++];
+                m[r][c] = 2;
+            }
+            for (let i = 0; i < brickCount && idx < available.length; i++) {
+                const [r, c] = available[idx++];
+                m[r][c] = 1;
+                hp[r+','+c] = BRICK_MAX_HP;
+            }
+            if (!isMapConnected(m)) continue;
+            return { map: m, brickHp: hp };
+        }
+        const m = Array(ROWS).fill().map(() => Array(COLS).fill(0));
+        const hp = {};
+        for (let r = 0; r < ROWS; r++) {
+            for (let c = 0; c < COLS; c++) {
+                if ((r === 0 || r === ROWS-1 || c === 0 || c === COLS-1) && 
+                    !((r===1&&c===12)||(r===11&&c===0))) {
+                    m[r][c] = 2;
+                }
+            }
+        }
+        const brickPos = [[3,3],[3,9],[5,5],[7,7],[9,3],[9,9]];
+        for (let [r,c] of brickPos) {
+            if (m[r][c] === 0) { m[r][c] = 1; hp[r+','+c] = BRICK_MAX_HP; }
+        }
+        return { map: m, brickHp: hp };
+    }
+
+    function refreshMap() {
+        const result = generateMap();
+        map = result.map;
+        brickHp = result.brickHp;
+        p1.col = P1_COL; p1.row = P1_ROW; p1.moveDir = P1_INIT_DIR; p1.aimDir = P1_INIT_DIR; p1.moves = 0;
+        p2.col = P2_COL; p2.row = P2_ROW; p2.moveDir = P2_INIT_DIR; p2.aimDir = P2_INIT_DIR; p2.moves = 0;
+        p1.moveLock = false; p2.moveLock = false;
+        bullets = [];
+        bulletsFired = 0;
+        cooldown1 = 0;
+        cooldown2 = 0;
+        isRoundActive = true;
+        roundEnding = false;
+        updateDisplay();
+    }
+
+    function resetGame() {
+        const result = generateMap();
+        map = result.map;
+        brickHp = result.brickHp;
+        p1 = { col: P1_COL, row: P1_ROW, moveDir: P1_INIT_DIR, aimDir: P1_INIT_DIR, alive: true, hp: MAX_HP, moveLock: false, moves: 0 };
+        p2 = { col: P2_COL, row: P2_ROW, moveDir: P2_INIT_DIR, aimDir: P2_INIT_DIR, alive: true, hp: MAX_HP, moveLock: false, moves: 0 };
+        bullets = [];
+        gameOver = false;
+        matchOver = false;
+        roundWinner = null;
+        winReason = '';
+        roundEnding = false;
+        isRoundActive = true;
+        round = 1;
+        bulletsFired = 0;
+        p1Shots = 0; p1Hits = 0; p1Damage = 0;
+        p2Shots = 0; p2Hits = 0; p2Damage = 0;
+        p1MatchScore = 0; p2MatchScore = 0;
+        p1RoundScore = 0; p2RoundScore = 0;
+        cooldown1 = 0;
+        cooldown2 = 0;
+        for (let k in keyPressed) keyPressed[k] = false;
+        updateDisplay();
+    }
+
+    // ===== 开火 =====
+    function fireBullet(tank, isP1) {
+        if (!isRoundActive || gameOver || matchOver) return;
+        if (bulletsFired >= ROUND_BULLETS) return;
+        if (!tank.alive) return;
+        if (isP1 && cooldown1 > 0) return;
+        if (!isP1 && cooldown2 > 0) return;
+        let cx = tank.col * TILE_SIZE + TILE_SIZE/2;
+        let cy = tank.row * TILE_SIZE + TILE_SIZE/2;
+        const dir = tank.aimDir;
+        const offset = TILE_SIZE * 0.45;
+        if (dir === UP) cy -= offset;
+        else if (dir === DOWN) cy += offset;
+        else if (dir === LEFT) cx -= offset;
+        else if (dir === RIGHT) cx += offset;
+        bullets.push({ x: cx, y: cy, dir: dir, speed: 5.0, owner: isP1 ? 1 : 2, alive: true });
+        bulletsFired++;
+        if (isP1) { cooldown1 = SHOT_COOLDOWN; p1Shots++; }
+        else { cooldown2 = SHOT_COOLDOWN; p2Shots++; }
+        updateDisplay();
+        playShootSound();
+    }
+
+    // ===== 移动 =====
+    function tryMovePlayer(player, dx, dy, newDir) {
+        if (!player.alive || gameOver || !isRoundActive || matchOver) return false;
+        if (player.moveLock) return false;
+        if (player.moveDir !== newDir) {
+            player.moveDir = newDir;
+            player.aimDir = newDir;
+            return true;
+        }
+        const nc = player.col + dx, nr = player.row + dy;
+        if (canMoveTo(nc, nr, player)) {
+            player.col = nc;
+            player.row = nr;
+            player.moveLock = true;
+            player.moves++;
+            updateDisplay();
+            return true;
+        }
+        return false;
+    }
+
+    // ===== 回合结算 =====
+    function endRound() {
+        if (roundEnding) return;
+        roundEnding = true;
+        isRoundActive = false;
+        let winner = 0;
+        const p1Rate = p1Shots > 0 ? p1Hits / p1Shots : 0;
+        const p2Rate = p2Shots > 0 ? p2Hits / p2Shots : 0;
+
+        if (p1Shots === ROUND_BULLETS && p1Rate === 0 && p2Shots === 0) { winner = 2; }
+        else if (p2Shots === ROUND_BULLETS && p2Rate === 0 && p1Shots === 0) { winner = 1; }
+        else if (p1Shots === 0 && !(p2Shots === ROUND_BULLETS && p2Rate === 0)) { winner = 2; }
+        else if (p2Shots === 0 && !(p1Shots === ROUND_BULLETS && p1Rate === 0)) { winner = 1; }
+        else if (bulletsFired >= ROUND_BULLETS && p1Damage === 0 && p2Damage === 0) {
+            const score1 = p1Shots + p1.moves * 0.5;
+            const score2 = p2Shots + p2.moves * 0.5;
+            if (score1 > score2) { winner = 1; }
+            else if (score2 > score1) { winner = 2; }
+            else {
+                p1MatchScore++;
+                p2MatchScore++;
+                roundWinner = 0;
+                p1RoundScore = 0;
+                p2RoundScore = 0;
+                p1Shots = 0; p1Hits = 0; p1Damage = 0;
+                p2Shots = 0; p2Hits = 0; p2Damage = 0;
+                bulletsFired = 0; bullets = [];
+                if (p1MatchScore >= WIN_SCORE || p2MatchScore >= WIN_SCORE) {
+                    matchOver = true;
+                    gameOver = true;
+                    winReason = 'rounds';
+                }
+                if (gameOver) { updateDisplay(); roundEnding = false; return; }
+                refreshMap();
+                round++;
+                isRoundActive = true;
+                roundEnding = false;
+                updateDisplay();
+                return;
+            }
+        } else {
+            p1RoundScore = p1Rate + (p1Damage / 1000);
+            p2RoundScore = p2Rate + (p2Damage / 1000);
+            if (p1RoundScore > p2RoundScore) { winner = 1; }
+            else if (p2RoundScore > p1RoundScore) { winner = 2; }
+            else { winner = 0; }
+        }
+
+        if (winner === 1) { p1MatchScore++; roundWinner = 1; }
+        else if (winner === 2) { p2MatchScore++; roundWinner = 2; }
+        else { roundWinner = 0; }
+
+        if (roundWinner === 1) {
+            p1.hp = Math.min(MAX_HP, p1.hp + HP_REWARD);
+            p2.hp = Math.max(0, p2.hp - HP_PENALTY);
+        } else if (roundWinner === 2) {
+            p2.hp = Math.min(MAX_HP, p2.hp + HP_REWARD);
+            p1.hp = Math.max(0, p1.hp - HP_PENALTY);
+        }
+
+        if (p1.hp <= 0) { p1.alive = false; p1.hp = 0; }
+        if (p2.hp <= 0) { p2.alive = false; p2.hp = 0; }
+        if (p1MatchScore >= WIN_SCORE || p2MatchScore >= WIN_SCORE) {
+            matchOver = true;
+            gameOver = true;
+            winReason = 'rounds';
+        }
+
+        p1Shots = 0; p1Hits = 0; p1Damage = 0;
+        p2Shots = 0; p2Hits = 0; p2Damage = 0;
+        bulletsFired = 0;
+        bullets = [];
+        if (gameOver) { updateDisplay(); roundEnding = false; return; }
+        refreshMap();
+        round++;
+        isRoundActive = true;
+        roundEnding = false;
+        updateDisplay();
+    }
+
+    function updateDisplay() {
+        const hp1 = Math.max(0, p1.hp), hp2 = Math.max(0, p2.hp);
+        p1HpText.textContent = hp1;
+        p2HpText.textContent = hp2;
+        p1HpBar.style.width = (hp1 / MAX_HP * 100) + '%';
+        p2HpBar.style.width = (hp2 / MAX_HP * 100) + '%';
+        p1MatchScoreText.textContent = p1MatchScore;
+        p2MatchScoreText.textContent = p2MatchScore;
+        p1RoundScoreText.textContent = p1RoundScore.toFixed(2);
+        p2RoundScoreText.textContent = p2RoundScore.toFixed(2);
+        roundText.textContent = Math.min(round, 7);
+        bulletText.textContent = ROUND_BULLETS - bulletsFired;
+        p1MoveCountText.textContent = p1.moves;
+        p2MoveCountText.textContent = p2.moves;
+        const p1Rate = p1Shots > 0 ? Math.round(p1Hits / p1Shots * 100) : 0;
+        const p2Rate = p2Shots > 0 ? Math.round(p2Hits / p2Shots * 100) : 0;
+        p1HitRateText.textContent = p1Rate + '%';
+        p2HitRateText.textContent = p2Rate + '%';
+        p1DamageText.textContent = p1Damage;
+        p2DamageText.textContent = p2Damage;
+    }
+
+    // ===== 绘制坦克 =====
+    function drawTank(col, row, moveDir, aimDir, primaryColor, secondaryColor, symbol) {
+        const x = col * TILE_SIZE;
+        const y = row * TILE_SIZE;
+        const s = TILE_SIZE;
+        const cx = x + s/2;
+        const cy = y + s/2;
+
+        ctx.fillStyle = '#3a3a3a';
+        ctx.fillRect(x + 2, y + 2, 4, s - 4);
+        ctx.fillRect(x + s - 6, y + 2, 4, s - 4);
+        ctx.fillStyle = '#4a4a4a';
+        for (let i = 0; i < s - 8; i += 6) {
+            ctx.fillRect(x + 2, y + 4 + i, 4, 2);
+            ctx.fillRect(x + s - 6, y + 4 + i, 4, 2);
+        }
+
+        ctx.shadowColor = 'rgba(0,0,0,0.3)';
+        ctx.shadowBlur = 4;
+        ctx.fillStyle = primaryColor;
+        ctx.fillRect(x + 6, y + 4, s - 12, s - 8);
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = secondaryColor;
+        ctx.fillRect(x + 8, y + 6, s - 16, s - 14);
+
+        ctx.beginPath();
+        ctx.arc(cx, cy, s * 0.3, 0, Math.PI * 2);
+        ctx.fillStyle = primaryColor;
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(0,0,0,0.2)';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.arc(cx, cy, s * 0.2, 0, Math.PI * 2);
+        ctx.fillStyle = secondaryColor;
+        ctx.fill();
+
+        ctx.shadowBlur = 4;
+        ctx.shadowColor = 'rgba(0,0,0,0.2)';
+        ctx.save();
+        ctx.translate(cx, cy);
+        
+        let angle = 0;
+        if (moveDir === UP) angle = 0;
+        else if (moveDir === RIGHT) angle = Math.PI / 2;
+        else if (moveDir === DOWN) angle = Math.PI;
+        else if (moveDir === LEFT) angle = -Math.PI / 2;
+        ctx.rotate(angle);
+
+        const barrelLen = s * 0.55;
+        const barrelW = 5;
+        ctx.fillStyle = '#3a3a3a';
+        ctx.fillRect(-barrelW/2, -barrelLen, barrelW, barrelLen);
+        ctx.fillStyle = '#555';
+        ctx.fillRect(-barrelW/4, -barrelLen + 2, 2, barrelLen - 4);
+        
+        ctx.fillStyle = '#2a2a2a';
+        ctx.fillRect(-barrelW/2 - 1, -barrelLen - 1, barrelW + 2, 4);
+        ctx.fillStyle = '#666';
+        ctx.fillRect(-barrelW/4, -barrelLen, 2, 2);
+
+        ctx.restore();
+        ctx.shadowBlur = 0;
+
+        ctx.beginPath();
+        ctx.arc(cx, cy, 3, 0, Math.PI * 2);
+        ctx.fillStyle = '#f5f0d0';
+        ctx.fill();
+
+        ctx.fillStyle = '#f5f0d0';
+        ctx.font = '14px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(symbol, cx, cy - 2);
+
+        ctx.fillStyle = 'rgba(255,255,100,0.25)';
+        ctx.font = '10px sans-serif';
+        let arrow = '';
+        if (aimDir === UP) arrow = '▲';
+        else if (aimDir === DOWN) arrow = '▼';
+        else if (aimDir === LEFT) arrow = '◄';
+        else if (aimDir === RIGHT) arrow = '►';
+        ctx.fillText(arrow, cx, cy + s * 0.4);
+    }
+
+    function draw() {
+        ctx.clearRect(0, 0, 600, 600);
+        for (let r = 0; r < ROWS; r++) {
+            for (let c = 0; c < COLS; c++) {
+                const x = c * TILE_SIZE, y = r * TILE_SIZE;
+                const cell = map[r][c];
+                if (cell === 1) {
+                    const hp = getBrickHp(r, c);
+                    const ratio = hp / BRICK_MAX_HP;
+                    const rc = Math.floor(180 + 75 * (1 - ratio));
+                    const gc = Math.floor(120 + 80 * ratio);
+                    const bc = Math.floor(60 + 40 * ratio);
+                    ctx.fillStyle = `rgb(${rc}, ${gc}, ${bc})`;
+                    ctx.fillRect(x, y, TILE_SIZE-0.5, TILE_SIZE-0.5);
+                    ctx.fillStyle = `rgba(180, 120, 60, 0.3)`;
+                    ctx.fillRect(x+2, y+2, TILE_SIZE-6, TILE_SIZE-6);
+                    ctx.fillStyle = '#fff';
+                    ctx.font = '10px monospace';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText(Math.ceil(hp), x + TILE_SIZE/2, y + TILE_SIZE/2);
+                } else if (cell === 2) {
+                    ctx.fillStyle = '#a0b8c9';
+                    ctx.fillRect(x, y, TILE_SIZE-0.5, TILE_SIZE-0.5);
+                    ctx.fillStyle = '#d0e2f0';
+                    ctx.fillRect(x+3, y+3, TILE_SIZE-8, TILE_SIZE-8);
+                    ctx.fillStyle = '#7f93a3';
+                    ctx.fillRect(x+1, y+1, TILE_SIZE-4, TILE_SIZE-4);
+                }
+            }
+        }
+        for (let b of bullets) {
+            if (!b.alive) continue;
+            ctx.beginPath();
+            ctx.arc(b.x, b.y, 6, 0, Math.PI*2);
+            ctx.fillStyle = (b.owner === 1) ? '#f5e56b' : '#6fcb9b';
+            ctx.shadowColor = '#f5d742';
+            ctx.shadowBlur = 16;
+            ctx.fill();
+            ctx.shadowBlur = 0;
+        }
+        // P1
+        if (p1.alive) {
+            drawTank(p1.col, p1.row, p1.moveDir, p1.aimDir, '#4f9f6b', '#6fcb9b', '★');
+        } else {
+            const x = p1.col * TILE_SIZE, y = p1.row * TILE_SIZE;
+            ctx.fillStyle = 'rgba(80,40,40,0.7)';
+            ctx.fillRect(x+4, y+4, TILE_SIZE-8, TILE_SIZE-8);
+            ctx.fillStyle = '#ff4444';
+            ctx.font = '24px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('✕', x+TILE_SIZE/2, y+TILE_SIZE/2);
+        }
+        // P2
+        if (p2.alive) {
+            drawTank(p2.col, p2.row, p2.moveDir, p2.aimDir, '#3f7b9e', '#5fa3cf', '✦');
+        } else {
+            const x = p2.col * TILE_SIZE, y = p2.row * TILE_SIZE;
+            ctx.fillStyle = 'rgba(40,40,80,0.7)';
+            ctx.fillRect(x+4, y+4, TILE_SIZE-8, TILE_SIZE-8);
+            ctx.fillStyle = '#ff4444';
+            ctx.font = '24px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('✕', x+TILE_SIZE/2, y+TILE_SIZE/2);
+        }
+
+        // Canvas内 "浩源" 水印
+        ctx.save();
+        ctx.shadowBlur = 40;
+        ctx.shadowColor = 'rgba(46, 125, 50, 0.15)';
+        ctx.font = 'bold 82px "SimHei", "Arial Black", "Segoe UI", sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillStyle = 'rgba(46, 125, 50, 0.12)';
+        ctx.fillText('浩源', 300, 300);
+        ctx.restore();
+
+        if (!gameOver && !isRoundActive && roundEnding) {
+            ctx.fillStyle = 'rgba(0,0,0,0.5)';
+            ctx.fillRect(0, 0, 600, 600);
+            ctx.font = 'bold 26px "Segoe UI", sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.shadowColor = 'black';
+            ctx.shadowBlur = 20;
+            let msg = roundWinner === 1 ? 'P1 赢！+150HP' : (roundWinner === 2 ? 'P2 赢！+150HP' : '平局！');
+            ctx.fillStyle = '#f5e56b';
+            ctx.fillText('回合结算: ' + msg, 300, 280);
+            ctx.shadowBlur = 0;
+        }
+        if (gameOver) {
+            ctx.fillStyle = 'rgba(10,10,10,0.6)';
+            ctx.fillRect(0, 0, 600, 600);
+            ctx.font = 'bold 36px "Segoe UI", sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.shadowColor = 'black';
+            ctx.shadowBlur = 20;
+            let winner = '', reason = '';
+            if (p1MatchScore >= WIN_SCORE) { winner = 'P1'; reason = '（七局四胜）'; }
+            else if (p2MatchScore >= WIN_SCORE) { winner = 'P2'; reason = '（七局四胜）'; }
+            else if (p1.alive && !p2.alive) { winner = 'P1'; reason = '（歼灭坦克）'; }
+            else if (p2.alive && !p1.alive) { winner = 'P2'; reason = '（歼灭坦克）'; }
+            else { ctx.fillStyle = '#f5e56b'; ctx.fillText('⚔️ 平局！', 300, 280); ctx.shadowBlur = 0; return; }
+            ctx.fillStyle = winner === 'P1' ? '#6fcb9b' : '#5fa3cf';
+            ctx.fillText('🏆 ' + winner + ' 总冠军！' + reason, 300, 280);
+            ctx.shadowBlur = 0;
+        }
+        ctx.strokeStyle = 'rgba(200,220,240,0.06)';
+        ctx.lineWidth = 0.5;
+        for (let i = 0; i <= COLS; i++) {
+            ctx.beginPath();
+            ctx.moveTo(i * TILE_SIZE, 0);
+            ctx.lineTo(i * TILE_SIZE, 600);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(0, i * TILE_SIZE);
+            ctx.lineTo(600, i * TILE_SIZE);
+            ctx.stroke();
+        }
+    }
+
+    // ===== 更新逻辑 =====
+    function update() {
+        if (gameOver) return;
+        if (cooldown1 > 0) cooldown1--;
+        if (cooldown2 > 0) cooldown2--;
+
+        if (p1.alive && isRoundActive && !matchOver) {
+            if (keys.w && !keyPressed.w) { keyPressed.w = true; tryMovePlayer(p1, 0, -1, UP); }
+            else if (keys.s && !keyPressed.s) { keyPressed.s = true; tryMovePlayer(p1, 0, 1, DOWN); }
+            else if (keys.a && !keyPressed.a) { keyPressed.a = true; tryMovePlayer(p1, -1, 0, LEFT); }
+            else if (keys.d && !keyPressed.d) { keyPressed.d = true; tryMovePlayer(p1, 1, 0, RIGHT); }
+            if (!keys.w && keyPressed.w) keyPressed.w = false;
+            if (!keys.s && keyPressed.s) keyPressed.s = false;
+            if (!keys.a && keyPressed.a) keyPressed.a = false;
+            if (!keys.d && keyPressed.d) keyPressed.d = false;
+            if (!keys.w && !keys.s && !keys.a && !keys.d) p1.moveLock = false;
+            if (keys.e) fireBullet(p1, true);
+        }
+
+        if (p2.alive && isRoundActive && !matchOver) {
+            if (keys.arrowup && !keyPressed.arrowup) { keyPressed.arrowup = true; tryMovePlayer(p2, 0, -1, UP); }
+            else if (keys.arrowdown && !keyPressed.arrowdown) { keyPressed.arrowdown = true; tryMovePlayer(p2, 0, 1, DOWN); }
+            else if (keys.arrowleft && !keyPressed.arrowleft) { keyPressed.arrowleft = true; tryMovePlayer(p2, -1, 0, LEFT); }
+            else if (keys.arrowright && !keyPressed.arrowright) { keyPressed.arrowright = true; tryMovePlayer(p2, 1, 0, RIGHT); }
+            if (!keys.arrowup && keyPressed.arrowup) keyPressed.arrowup = false;
+            if (!keys.arrowdown && keyPressed.arrowdown) keyPressed.arrowdown = false;
+            if (!keys.arrowleft && keyPressed.arrowleft) keyPressed.arrowleft = false;
+            if (!keys.arrowright && keyPressed.arrowright) keyPressed.arrowright = false;
+            if (!keys.arrowup && !keys.arrowdown && !keys.arrowleft && !keys.arrowright) p2.moveLock = false;
+            if (keys.digit0) fireBullet(p2, false);
+        }
+
+        for (let b of bullets) {
+            if (!b.alive) continue;
+            let dx = 0, dy = 0;
+            if (b.dir === UP) dy = -b.speed;
+            else if (b.dir === DOWN) dy = b.speed;
+            else if (b.dir === LEFT) dx = -b.speed;
+            else if (b.dir === RIGHT) dx = b.speed;
+            b.x += dx; b.y += dy;
+            if (b.x < 0 || b.x > 600 || b.y < 0 || b.y > 600) { b.alive = false; continue; }
+            const tile = posToTile(b.x, b.y);
+            const col = tile.col, row = tile.row;
+            if (col < 0 || col >= COLS || row < 0 || row >= ROWS) { b.alive = false; continue; }
+            const cell = map[row][col];
+            if (cell === 2) { b.alive = false; continue; }
+            if (cell === 1) {
+                let hp = getBrickHp(row, col);
+                hp -= DAMAGE;
+                if (hp <= 0) { setBrickHp(row, col, 0); map[row][col] = 0; }
+                else { setBrickHp(row, col, hp); }
+                b.alive = false;
+                continue;
+            }
+            const pTile = posToTile(b.x, b.y);
+            if (p1.alive && b.owner !== 1 && pTile.col === p1.col && pTile.row === p1.row) {
+                p1.hp -= DAMAGE; b.alive = false;
+                p1Damage += DAMAGE; p2Hits++;
+                playHitSound();
+                if (p1.hp <= 0) { 
+                    p1.alive = false; p1.hp = 0;
+                    gameOver = true; matchOver = true;
+                    winReason = 'kill';
+                    playExplodeSound();
+                }
+                updateDisplay();
+                continue;
+            }
+            if (p2.alive && b.owner !== 2 && pTile.col === p2.col && pTile.row === p2.row) {
+                p2.hp -= DAMAGE; b.alive = false;
+                p2Damage += DAMAGE; p1Hits++;
+                playHitSound();
+                if (p2.hp <= 0) { 
+                    p2.alive = false; p2.hp = 0;
+                    gameOver = true; matchOver = true;
+                    winReason = 'kill';
+                    playExplodeSound();
+                }
+                updateDisplay();
+                continue;
+            }
+        }
+        bullets = bullets.filter(b => b.alive);
+        if (!p1.alive || !p2.alive) { gameOver = true; matchOver = true; updateDisplay(); return; }
+        if (isRoundActive && bulletsFired >= ROUND_BULLETS) { endRound(); }
+    }
+
+    function gameLoop() { update(); draw(); requestAnimationFrame(gameLoop); }
+
+    // ===== 键盘 =====
+    function keydownHandler(e) {
+        const key = e.key;
+        if (key === 'w' || key === 'W') { e.preventDefault(); keys.w = true; }
+        else if (key === 'a' || key === 'A') { e.preventDefault(); keys.a = true; }
+        else if (key === 's' || key === 'S') { e.preventDefault(); keys.s = true; }
+        else if (key === 'd' || key === 'D') { e.preventDefault(); keys.d = true; }
+        else if (key === 'e' || key === 'E') { e.preventDefault(); keys.e = true; }
+        else if (key === 'ArrowUp') { e.preventDefault(); keys.arrowup = true; }
+        else if (key === 'ArrowDown') { e.preventDefault(); keys.arrowdown = true; }
+        else if (key === 'ArrowLeft') { e.preventDefault(); keys.arrowleft = true; }
+        else if (key === 'ArrowRight') { e.preventDefault(); keys.arrowright = true; }
+        else if (key === '0') { e.preventDefault(); keys.digit0 = true; }
+    }
+
+    function keyupHandler(e) {
+        const key = e.key;
+        if (key === 'w' || key === 'W') { e.preventDefault(); keys.w = false; }
+        else if (key === 'a' || key === 'A') { e.preventDefault(); keys.a = false; }
+        else if (key === 's' || key === 'S') { e.preventDefault(); keys.s = false; }
+        else if (key === 'd' || key === 'D') { e.preventDefault(); keys.d = false; }
+        else if (key === 'e' || key === 'E') { e.preventDefault(); keys.e = false; }
+        else if (key === 'ArrowUp') { e.preventDefault(); keys.arrowup = false; }
+        else if (key === 'ArrowDown') { e.preventDefault(); keys.arrowdown = false; }
+        else if (key === 'ArrowLeft') { e.preventDefault(); keys.arrowleft = false; }
+        else if (key === 'ArrowRight') { e.preventDefault(); keys.arrowright = false; }
+        else if (key === '0') { e.preventDefault(); keys.digit0 = false; }
+    }
+
+    // ===== 启动 =====
+    playBackgroundMusic();
+    resetGame();
+    window.addEventListener('keydown', keydownHandler);
+    window.addEventListener('keyup', keyupHandler);
+    document.getElementById('resetButton').addEventListener('click', resetGame);
+    window.addEventListener('contextmenu', e => e.preventDefault());
+    gameLoop();
+})();
+</script>
+</body>
+</html>
